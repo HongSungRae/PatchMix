@@ -21,7 +21,7 @@ from parameters import SEED
 
 
 class BUSI(Dataset):
-    def __init__(self, split='train', dataset=None, augmentation=None, aug_p=0.5, size=256):
+    def __init__(self, split='train', dataset=None, augmentation=None, aug_p=0.5, ratio=None, size=256):
         assert split in ['train', 'test', 'validation'], "BUSI split Error"
         assert dataset in ['benign', 'malignant', 'normal'], "BUSI dataset Error"
         assert augmentation in ['cp_simple', 'cp_gaussian', 'cp_poisson', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None], "BUSI augmentation Error"
@@ -33,6 +33,7 @@ class BUSI(Dataset):
         self.dataset = dataset
         self.augmentation = augmentation
         self.aug_p = aug_p
+        self.ratio = ratio
         self.size = size
         self.path = 'E:/BUSI/' + dataset
         self.img_list = glob.glob(self.path + '/*(*).png')
@@ -47,9 +48,10 @@ class BUSI(Dataset):
             self.img_list = self.img_list[int(0.85*len(self.img_list)):]
         self.legnth = len(self.img_list)
         
+        self.normal_transform = A.Compose([A.Resize(size,size),
+                                           ToTensorV2()])
         if (split in ['validation', 'test']) or (augmentation == None):
-            self.transform = A.Compose([A.Resize(size,size),
-                                        ToTensorV2()])
+            self.transform = self.normal_transform
         elif augmentation == 'cp_simple':
             self.transform = A.Compose([A.RandomScale(scale_limit=(-0.9, 1), p=1), # (-1,0)에서 크기가 줄고 (0,2)에서 크기가 원본보다 커진다
                                         A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT), # 원래는 0 이었다
@@ -71,7 +73,7 @@ class BUSI(Dataset):
     def __len__(self):
         return self.length
 
-    def _get_img_mask(self, img_path):
+    def _get_img_mask(self, img_path, transform):
         # image Input
         img = cv2.imread(img_path,cv2.IMREAD_COLOR)/255
         # mask Input
@@ -82,7 +84,7 @@ class BUSI(Dataset):
             path = os.path.join(self.path, name)
             mask += cv2.imread(path, cv2.IMREAD_GRAYSCALE)
         mask = np.where(mask>0, 255, mask)
-        sample = self.transform(image=img, mask=mask)
+        sample = transform(image=img, mask=mask)
         img, mask = sample['image'], sample['mask']
         try:
             mask = torch.where(mask>0, 1, 0)
@@ -94,12 +96,16 @@ class BUSI(Dataset):
         return img, mask
 
     def __getitem__(self, idx):
-        if (random.random() >= self.aug_p) or (self.split in ['test', 'validation']) or (self.augmentation in [None, 'image_aug']):
-            img, mask = self._get_img_mask(self.img_list[idx])
+        if self.ratio != None:
+            idx = random.random(0, len(self.img_list)-1)
+        if (random.random() >= self.aug_p) or (self.split in ['test', 'validation']) or (self.augmentation == None):
+            img, mask = self._get_img_mask(self.img_list[idx], self.normal_transform)
+        elif self.augmentation == 'image_aug':
+            img, mask = self._get_img_mask(self.img_list[idx], self.transform)
         else: #img_1 : main(붙임당할 이미지) , img_2 : paste(붙일 이미지)
             img_1_path, img_2_path = random.sample(self.img_list, 2) # random.seed의 영향없이 무작위
-            img_1, mask_1 = self._get_img_mask(os.path.join(img_1_path))
-            img_2, mask_2 = self._get_img_mask(os.path.join(img_2_path))
+            img_1, mask_1 = self._get_img_mask(os.path.join(img_1_path), self.transform)
+            img_2, mask_2 = self._get_img_mask(os.path.join(img_2_path), self.transform)
             # print(torch.any(mask_1[...,1]), torch.any(mask_2[...,1]))
             if self.augmentation == 'cutmix_half':
                 img, mask = cutmix_half(img_1, img_2, mask_1, mask_2)
