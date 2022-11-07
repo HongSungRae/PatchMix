@@ -1,0 +1,11 @@
+# local
+yaml.yml
+A
+run.bat
+visualize.ipynb
+exp/
+wandb/
+
+# global
+__pycache__/
+*.pyc
