@@ -228,7 +228,8 @@ def main(args):
             additional_train_dataset = BUSI(split='train', 
                                             dataset = args.busi_what, 
                                             augmentation=args.augmentation, 
-                                            aug_p=1.0, 
+                                            aug_p=1.0,
+                                            ratio=args.ratio, 
                                             size=args.size)
             additional_train_dataset.length = int(len(train_dataset) * args.ratio)
             train_dataset += additional_train_dataset
@@ -247,16 +248,17 @@ def main(args):
                                dataset = args.seegene_what,
                                augmentation=None,
                                size=args.size)
-        if args.ratio > 1.0:
-            ratio = args.ratio - 1.0
+        if args.ratio != None:
             additional_train_dataset = Seegene(split='train',
                                                dataset = args.seegene_what,
                                                augmentation=args.augmentation,
                                                aug_p=1.0,
+                                               ratio=args.ratio,
                                                size=args.size)
-            additional_train_dataset.length = int(len(train_dataset) * ratio)
+            additional_train_dataset.length = int(len(train_dataset) * args.ratio)
             train_dataset += additional_train_dataset
     elif args.dataset == 'digestpath2019':
+        num_classes = 2
         raise NotImplementedError('digestpath2019')
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
     validation_loader = DataLoader(validation_dataset, batch_size = args.batch_size, shuffle=True, drop_last=False)
