@@ -36,7 +36,6 @@ class Seegene(Dataset):
         self.ratio = ratio
         self.size = size
         self.is_image_M = True
-        self.length = 0
 
         # define dataset dataframe
         if dataset == 'NM':
@@ -51,9 +50,7 @@ class Seegene(Dataset):
         # define augmentation
         self.normal_transform = A.Compose([A.Resize(size,size),
                                            ToTensorV2()])
-        if (split in ['validation', 'test']) or (augmentation == None):
-            self.transform = self.normal_transform
-        elif augmentation == 'cp_simple':
+        if augmentation == 'cp_simple':
             self.transform = A.Compose([A.RandomScale(scale_limit=(-0.9, 1), p=1), # (-1,0)에서 크기가 줄고 (0,2)에서 크기가 원본보다 커진다
                                         A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT), # 원래는 0 이었다
                                         A.HorizontalFlip(),
@@ -61,7 +58,7 @@ class Seegene(Dataset):
                                         ToTensorV2()])
         elif augmentation == 'cp_tumor':
             self.transform = A.Compose([A.Resize(size,size)]) # cp_tumor는 numpy.ndarray를 입력받음
-        else:
+        else: # ['cp_gaussian', 'cp_poisson', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug']
             self.transform = A.Compose([# Simple Aug
                                         A.HorizontalFlip(p=0.33),
                                         A.VerticalFlip(p=0.33),

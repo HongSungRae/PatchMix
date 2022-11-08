@@ -50,9 +50,7 @@ class BUSI(Dataset):
         
         self.normal_transform = A.Compose([A.Resize(size,size),
                                            ToTensorV2()])
-        if (split in ['validation', 'test']) or (augmentation == None):
-            self.transform = self.normal_transform
-        elif augmentation == 'cp_simple':
+        if augmentation == 'cp_simple':
             self.transform = A.Compose([A.RandomScale(scale_limit=(-0.9, 1), p=1), # (-1,0)에서 크기가 줄고 (0,2)에서 크기가 원본보다 커진다
                                         A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT), # 원래는 0 이었다
                                         A.HorizontalFlip(),
