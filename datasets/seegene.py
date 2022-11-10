@@ -87,6 +87,7 @@ class Seegene(Dataset):
                 mask = torch.stack((torch.ones_like(mask) - mask, mask),dim=-1)
             except:
                 mask = np.stack((np.ones_like(mask) - mask, mask), axis=-1).astype(np.float64) # (size, size, 2)
+                mask = torch.from_numpy(mask)
         except: # N data
             image = cv2.imread(f"{self.path}/N/{pat_id}_{file_id}.png", cv2.IMREAD_COLOR)
             sample = transform(image=image)
@@ -95,6 +96,7 @@ class Seegene(Dataset):
                 mask_0 = np.ones((self.size,self.size,1))
                 mask_1 = np.zeros((self.size,self.size,1))
                 mask = np.concatenate((mask_0,mask_1),axis=-1)
+                mask = torch.from_numpy(mask)
             else:
                 mask_0 = torch.ones((self.size,self.size,1))
                 mask_1 = torch.zeros((self.size,self.size,1))
@@ -147,10 +149,10 @@ class Seegene(Dataset):
 
 
 if __name__ == '__main__':
-    for augmentation in ['cp_simple', 'cp_gaussian', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None, 'cp_poisson']:
-        for d in ['M', 'NM']:
-            dataset = Seegene(split='train', dataset=d, augmentation=augmentation, aug_p=1)
-            dataloader = DataLoader(dataset, 1)
+    for augmentation in ['cp_tumor']:#['cp_simple', 'cp_gaussian', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None, 'cp_poisson']:
+        for d in ['NM']:#['M', 'NM']:
+            dataset = Seegene(split='train', dataset=d, augmentation=augmentation, aug_p=0.5)
+            dataloader = DataLoader(dataset, 16, shuffle=True)
             start = time.time()
             image, mask = next(iter(dataloader))
-            print(f'{d}/{augmentation} | Image : {image.shape} | Mask : {mask.shape} | {(time.time()-start)/60:.4f} 초')
+            print(f'{d}/{augmentation} | Image : {image.shape} | Mask : {mask.shape} | {(time.time()-start):.4f} 초')
