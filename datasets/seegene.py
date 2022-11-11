@@ -9,6 +9,7 @@ import random
 import os
 import sys
 import time
+from multiprocessing import Manager
 
 dir = os.path.realpath(__file__)
 dir = os.path.abspath(os.path.join(dir, os.pardir, os.pardir))
@@ -24,15 +25,18 @@ from augmentations.cutmix import cutmix_dice, cutmix_half, cutmix_random
 
 
 class Seegene(Dataset):
-    def __init__(self, split='train', dataset='NM', augmentation=None, aug_p=0.5, ratio=None, size=256):
+    def __init__(self, cache=None, split='train', dataset='NM', augmentation=None, aug_p=0.5, ratio=None, size=256):
         assert split in ['train', 'test', 'validation'], "Seegene split Error"
         assert dataset in ['M','NM'], "Seegene dataset Error"
         assert augmentation in ['cp_simple', 'cp_gaussian', 'cp_poisson', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None], "Seegene augmentation Error"
+        self.cache = cache
         self.path = 'D:/seegene/data/segmentation/preprocessed'
         self.split = split
         self.dataset = dataset
         self.augmentation = augmentation
-        self.aug_p = aug_p
+        if ratio != None:
+            self.aug_p = 0.0
+        else: self.aug_p = aug_p
         self.ratio = ratio
         self.size = size
         self.is_image_M = True
@@ -75,12 +79,18 @@ class Seegene(Dataset):
                                         ])
 
     def __len__(self):
-        return self.length
+        if self.ratio != None:
+            return self.legnth + int(self.length*self.ratio)
+        else:
+            return self.length
 
     def _get_img_mask(self,pat_id,file_id, transform):
         try: # M data
-            image = cv2.imread(f'{self.path}/M/{pat_id}_{file_id}.png', cv2.IMREAD_COLOR) # (1504,2056,3), np.ndarray
-            mask = cv2.imread(f"{self.path}/M/{pat_id}_{file_id}_mask.png", cv2.IMREAD_GRAYSCALE) # (1504,2056), np.ndarray
+            image = self.cache.get(f'{self.path}/M/{pat_id}_{file_id}.png', None)
+            mask = self.cache.get(f"{self.path}/M/{pat_id}_{file_id}_mask.png", None)
+            if (image is None) or (mask is None):
+                image = cv2.imread(f'{self.path}/M/{pat_id}_{file_id}.png', cv2.IMREAD_COLOR) # (1504,2056,3), np.ndarray
+                mask = cv2.imread(f"{self.path}/M/{pat_id}_{file_id}_mask.png", cv2.IMREAD_GRAYSCALE) # (1504,2056), np.ndarray
             sample = transform(image=image, mask=mask)
             image, mask = sample["image"]/255, sample["mask"]/255 # (3,size,size) (size,size)
             try:
@@ -88,7 +98,10 @@ class Seegene(Dataset):
             except:
                 mask = np.stack((np.ones_like(mask) - mask, mask), axis=-1).astype(np.float64) # (size, size, 2)
         except: # N data
-            image = cv2.imread(f"{self.path}/N/{pat_id}_{file_id}.png", cv2.IMREAD_COLOR)
+            image = self.cache.get(f"{self.path}/N/{pat_id}_{file_id}.png", None)
+            if image is None:
+                image = cv2.imread(f"{self.path}/N/{pat_id}_{file_id}.png", cv2.IMREAD_COLOR)
+                self.cache[f"{self.path}/N/{pat_id}_{file_id}.png"] = image
             sample = transform(image=image)
             image = sample["image"]/255 # (3, size, size)
             if self.augmentation == 'cp_tumor':
@@ -104,8 +117,9 @@ class Seegene(Dataset):
 
 
     def __getitem__(self, idx):
-        if self.ratio != None:
-            idx = random.randint(0, len(self.df)-1)
+        if (idx > self.length) and (self.ratio != None):
+            self.aug_p == 1.0
+            idx = random.randint(0, self.legnth-1)
         if (random.random() >= self.aug_p) or (self.split in ['test', 'validation']) or (self.augmentation == None):
             pat_id, file_id = self.df.iloc[idx]
             img, mask = self._get_img_mask(pat_id, file_id, self.normal_transform)
@@ -148,10 +162,12 @@ class Seegene(Dataset):
 
 
 if __name__ == '__main__':
+    manager = Manager()
+    img_cache = manager.dict()
     for augmentation in ['cp_simple', 'cp_gaussian', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None, 'cp_poisson']:
         for d in ['M', 'NM']:
-            dataset = Seegene(split='train', dataset=d, augmentation=augmentation, aug_p=0.5)
-            dataloader = DataLoader(dataset, 16, shuffle=True)
+            dataset = Seegene(split='train', cache=img_cache, dataset=d, augmentation=augmentation, aug_p=0.5)
+            dataloader = DataLoader(dataset, 16, shuffle=False)
             start = time.time()
             image, mask = next(iter(dataloader))
             print(f'{d}/{augmentation} | Image : {image.shape} | Mask : {mask.shape} | {(time.time()-start):.4f} 초')
