@@ -13,6 +13,7 @@ import wandb
 import json
 from pprint import pprint
 import random
+from multiprocessing import Manager
 
 # local
 from utils import *
@@ -207,14 +208,17 @@ def main(args):
         json.dump(args.__dict__, f, indent=2)
 
     # dataset and dataloader
-    if args.ratio != None:
-        args.aug_p = 0.0
+    manager = Manager()
+    img_cache = manager.dict()
+    # if args.ratio != None:
+    #     args.aug_p = 0.0
     if args.dataset == 'busi':
         num_classes = 2
-        train_dataset = BUSI(split='train', 
+        train_dataset = BUSI(split='train',
                              dataset = args.busi_what, 
                              augmentation=args.augmentation, 
-                             aug_p=args.aug_p, 
+                             aug_p=args.aug_p,
+                             ratio=args.ratio, 
                              size=args.size)
         validation_dataset = BUSI(split='validation', 
                                   dataset = args.busi_what, 
@@ -224,39 +228,43 @@ def main(args):
                             dataset = args.busi_what, 
                             augmentation=None, 
                             size=args.size)
-        if args.ratio != None:
-            additional_train_dataset = BUSI(split='train', 
-                                            dataset = args.busi_what, 
-                                            augmentation=args.augmentation, 
-                                            aug_p=1.0,
-                                            ratio=args.ratio, 
-                                            size=args.size)
-            additional_train_dataset.length = int(len(train_dataset) * args.ratio)
-            train_dataset += additional_train_dataset
+        # if args.ratio != None:
+        #     additional_train_dataset = BUSI(split='train', 
+        #                                     dataset = args.busi_what, 
+        #                                     augmentation=args.augmentation, 
+        #                                     aug_p=1.0,
+        #                                     ratio=args.ratio, 
+        #                                     size=args.size)
+        #     additional_train_dataset.length = int(len(train_dataset) * args.ratio)
+        #     train_dataset += additional_train_dataset
     elif args.dataset == 'seegene':
         num_classes = 2
         train_dataset = Seegene(split='train',
+                                cache=img_cache,
                                 dataset = args.seegene_what,
                                 augmentation=args.augmentation,
                                 aug_p=args.aug_p,
+                                ratio=args.ratio,
                                 size=args.size)
         validation_dataset = Seegene(split='validation',
+                                     cache=img_cache,
                                      dataset = args.seegene_what,
                                      augmentation=None,
                                      size=args.size)
         test_dataset = Seegene(split='test',
+                               cache=img_cache,
                                dataset = args.seegene_what,
                                augmentation=None,
                                size=args.size)
-        if args.ratio != None:
-            additional_train_dataset = Seegene(split='train',
-                                               dataset = args.seegene_what,
-                                               augmentation=args.augmentation,
-                                               aug_p=1.0,
-                                               ratio=args.ratio,
-                                               size=args.size)
-            additional_train_dataset.length = int(len(train_dataset) * args.ratio)
-            train_dataset += additional_train_dataset
+        # if args.ratio != None:
+        #     additional_train_dataset = Seegene(split='train',
+        #                                        dataset = args.seegene_what,
+        #                                        augmentation=args.augmentation,
+        #                                        aug_p=1.0,
+        #                                        ratio=args.ratio,
+        #                                        size=args.size)
+        #     additional_train_dataset.length = int(len(train_dataset) * args.ratio)
+        #     train_dataset += additional_train_dataset
     elif args.dataset == 'digestpath2019':
         num_classes = 2
         raise NotImplementedError('digestpath2019')
