@@ -80,7 +80,7 @@ class Seegene(Dataset):
 
     def __len__(self):
         if self.ratio != None:
-            return self.legnth + int(self.length*self.ratio)
+            return (self.length + int(self.length*self.ratio))
         else:
             return self.length
 
@@ -91,6 +91,8 @@ class Seegene(Dataset):
             if (image is None) or (mask is None):
                 image = cv2.imread(f'{self.path}/M/{pat_id}_{file_id}.png', cv2.IMREAD_COLOR) # (1504,2056,3), np.ndarray
                 mask = cv2.imread(f"{self.path}/M/{pat_id}_{file_id}_mask.png", cv2.IMREAD_GRAYSCALE) # (1504,2056), np.ndarray
+                self.cache[f'{self.path}/M/{pat_id}_{file_id}.png'] = image
+                self.cache[f"{self.path}/M/{pat_id}_{file_id}_mask.png"] = mask
             sample = transform(image=image, mask=mask)
             image, mask = sample["image"]/255, sample["mask"]/255 # (3,size,size) (size,size)
             try:
@@ -119,7 +121,7 @@ class Seegene(Dataset):
     def __getitem__(self, idx):
         if (idx > self.length) and (self.ratio != None):
             self.aug_p == 1.0
-            idx = random.randint(0, self.legnth-1)
+            idx = random.randint(0, self.length-1)
         if (random.random() >= self.aug_p) or (self.split in ['test', 'validation']) or (self.augmentation == None):
             pat_id, file_id = self.df.iloc[idx]
             img, mask = self._get_img_mask(pat_id, file_id, self.normal_transform)
