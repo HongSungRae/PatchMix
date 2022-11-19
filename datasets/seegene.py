@@ -20,7 +20,7 @@ sys.path.append(dir)
 
 # local
 from augmentations.cp import _cp_poisson, cp_poisson, cp_gaussian, cp_tumor, cp_simple
-from augmentations.cutmix import cutmix_dice, cutmix_half, cutmix_random
+from augmentations.cutmix import cutmix_dice, cutmix_half, cutmix_random, cutmix_random_tumor, cutmix_random_poisson
 
 
 
@@ -28,7 +28,9 @@ class Seegene(Dataset):
     def __init__(self, cache=None, split='train', dataset='NM', augmentation=None, aug_p=0.5, ratio=None, size=256):
         assert split in ['train', 'test', 'validation'], "Seegene split Error"
         assert dataset in ['M','NM'], "Seegene dataset Error"
-        assert augmentation in ['cp_simple', 'cp_gaussian', 'cp_poisson', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None], "Seegene augmentation Error"
+        assert augmentation in ['cp_naive', 'cp_simple', 'cp_gaussian', 'cp_poisson', 'cp_tumor', 
+                                'cutmix_half', 'cutmix_dice', 'cutmix_random', 'cutmix_random_gaussian', 'cutmix_random_simple', 'cutmix_random_tumor', 'cutmix_random_poisson',
+                                'image_aug', None], "Seegene augmentation Error"
         self.cache = cache
         self.path = 'D:/seegene/data/segmentation/preprocessed'
         self.split = split
@@ -54,14 +56,16 @@ class Seegene(Dataset):
         # define augmentation
         self.normal_transform = A.Compose([A.Resize(size,size),
                                            ToTensorV2()])
-        if augmentation == 'cp_simple':
+        if 'simple' in augmentation: # 'cp_simple', 'cutmix_random_simple'
             self.transform = A.Compose([A.RandomScale(scale_limit=(-0.9, 1), p=1), # (-1,0)에서 크기가 줄고 (0,2)에서 크기가 원본보다 커진다
                                         A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT), # 원래는 0 이었다
                                         A.HorizontalFlip(),
                                         A.RandomCrop(size, size),
                                         ToTensorV2()])
-        elif augmentation == 'cp_tumor':
-            self.transform = A.Compose([A.Resize(size,size)]) # cp_tumor는 numpy.ndarray를 입력받음
+        elif (augmentation == 'cp_naive'):
+            self.transform = self.normal_transform
+        elif 'tumor' in augmentation: # 'cp_tumor', 'cutmix_random_tumor'
+            self.transform = A.Compose([A.Resize(size,size)]) # cp_naive, cp_tumor는 numpy.ndarray를 입력받음
         else: # ['cp_gaussian', 'cp_poisson', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug']
             self.transform = A.Compose([# Simple Aug
                                         A.HorizontalFlip(p=0.33),
@@ -91,8 +95,9 @@ class Seegene(Dataset):
             if (image is None) or (mask is None):
                 image = cv2.imread(f'{self.path}/M/{pat_id}_{file_id}.png', cv2.IMREAD_COLOR) # (1504,2056,3), np.ndarray
                 mask = cv2.imread(f"{self.path}/M/{pat_id}_{file_id}_mask.png", cv2.IMREAD_GRAYSCALE) # (1504,2056), np.ndarray
-                self.cache[f'{self.path}/M/{pat_id}_{file_id}.png'] = image
-                self.cache[f"{self.path}/M/{pat_id}_{file_id}_mask.png"] = mask
+                resize = A.Resize(self.size,self.size)(image=image, mask=mask) # resize for caching. (1504, 2056) is too big to cache
+                self.cache[f'{self.path}/M/{pat_id}_{file_id}.png'] = resize['image']
+                self.cache[f"{self.path}/M/{pat_id}_{file_id}_mask.png"] = resize['mask']
             sample = transform(image=image, mask=mask)
             image, mask = sample["image"]/255, sample["mask"]/255 # (3,size,size) (size,size)
             try:
@@ -103,7 +108,8 @@ class Seegene(Dataset):
             image = self.cache.get(f"{self.path}/N/{pat_id}_{file_id}.png", None)
             if image is None:
                 image = cv2.imread(f"{self.path}/N/{pat_id}_{file_id}.png", cv2.IMREAD_COLOR)
-                self.cache[f"{self.path}/N/{pat_id}_{file_id}.png"] = image
+                resize = A.Resize(self.size,self.size)(image=image) # resize for caching. (1504, 2056) is too big to cache
+                self.cache[f"{self.path}/N/{pat_id}_{file_id}.png"] = resize['image']
             sample = transform(image=image)
             image = sample["image"]/255 # (3, size, size)
             if self.augmentation == 'cp_tumor':
@@ -142,6 +148,16 @@ class Seegene(Dataset):
                 img, mask = cutmix_dice(img_1, img_2, mask_1, mask_2)
             elif self.augmentation == 'cutmix_random':
                 img, mask = cutmix_random(img_1, img_2, mask_1, mask_2)
+            elif self.augmentation == 'cutmix_random_simple':
+                img, mask = cutmix_random(img_1, img_2, mask_1, mask_2)
+            elif self.augmentation == 'cutmix_random_gaussian':
+                img, mask = cutmix_random(img_1, img_2, mask_1, mask_2, gaussian_blur=True)
+            elif self.augmentation == 'cutmix_random_tumor':
+                img, mask = cutmix_random_tumor(img_1, img_2, mask_1, mask_2, size=self.size)
+            elif self.augmentation == 'cutmix_random_poisson':
+                pass
+            elif self.augmentation == 'cp_naive':
+                img, mask = cp_simple(img_1, img_2, mask_1, mask_2, gaussian_blur=False)
             elif self.augmentation == 'cp_simple':
                 img, mask = cp_simple(img_1, img_2, mask_1, mask_2)
             elif self.augmentation == 'cp_gaussian':
@@ -153,7 +169,7 @@ class Seegene(Dataset):
                 #                         src_img_path = f'{self.path}/M/{pat_id_2}_{file_id_2}.png', 
                 #                         src_mask_path = f'{self.path}/M/{pat_id_2}_{file_id_2}_mask.png')
             elif  self.augmentation == 'cp_tumor':
-                img, mask = cp_tumor(img_1, img_2, mask_1, mask_2)
+                img, mask = cp_tumor(img_1, img_2, mask_1, mask_2, self.size)
         try:
             return img.float(), mask.float()
         except:
