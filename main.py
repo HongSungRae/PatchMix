@@ -340,6 +340,11 @@ def main(args):
                 # wandb.save(f'{save_path}/model.pth')
 
         # test
+        del manager, img_cache, train_dataset, train_loader, validation_dataset, validation_loader
+        manager = Manager()
+        img_cache = manager.dict()
+        test_dataset.cache = img_cache
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
         test(model, test_loader, save_path, args)
 
     print(f"Process Complete : it took {((time.time()-start)/60):.2f} minutes")
