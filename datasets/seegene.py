@@ -56,15 +56,15 @@ class Seegene(Dataset):
         # define augmentation
         self.normal_transform = A.Compose([A.Resize(size,size),
                                            ToTensorV2()])
-        if 'simple' in augmentation: # 'cp_simple', 'cutmix_random_simple'
+        if augmentation in ['cp_simple', 'cutmix_random_simple']:
             self.transform = A.Compose([A.RandomScale(scale_limit=(-0.9, 1), p=1), # (-1,0)에서 크기가 줄고 (0,2)에서 크기가 원본보다 커진다
                                         A.PadIfNeeded(size, size, border_mode=cv2.BORDER_CONSTANT), # 원래는 0 이었다
                                         A.HorizontalFlip(),
                                         A.RandomCrop(size, size),
                                         ToTensorV2()])
-        elif (augmentation == 'cp_naive'):
+        elif augmentation == 'cp_naive':
             self.transform = self.normal_transform
-        elif 'tumor' in augmentation: # 'cp_tumor', 'cutmix_random_tumor'
+        elif augmentation in ['cp_tumor', 'cutmix_random_tumor']:
             self.transform = A.Compose([A.Resize(size,size)]) # cp_naive, cp_tumor는 numpy.ndarray를 입력받음
         else: # ['cp_gaussian', 'cp_poisson', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug']
             self.transform = A.Compose([# Simple Aug
@@ -112,7 +112,7 @@ class Seegene(Dataset):
                 self.cache[f"{self.path}/N/{pat_id}_{file_id}.png"] = resize['image']
             sample = transform(image=image)
             image = sample["image"]/255 # (3, size, size)
-            if self.augmentation == 'cp_tumor':
+            if self.augmentation in ['cp_tumor', 'cutmix_random_tumor']:
                 mask_0 = np.ones((self.size,self.size,1))
                 mask_1 = np.zeros((self.size,self.size,1))
                 mask = np.concatenate((mask_0,mask_1),axis=-1)
@@ -155,7 +155,7 @@ class Seegene(Dataset):
             elif self.augmentation == 'cutmix_random_tumor':
                 img, mask = cutmix_random_tumor(img_1, img_2, mask_1, mask_2, size=self.size)
             elif self.augmentation == 'cutmix_random_poisson':
-                pass
+                img, mask = cutmix_random_poisson(img_1, img_2, mask_1, mask_2)
             elif self.augmentation == 'cp_naive':
                 img, mask = cp_simple(img_1, img_2, mask_1, mask_2, gaussian_blur=False)
             elif self.augmentation == 'cp_simple':
@@ -182,7 +182,9 @@ class Seegene(Dataset):
 if __name__ == '__main__':
     manager = Manager()
     img_cache = manager.dict()
-    for augmentation in ['cp_simple', 'cp_gaussian', 'cp_tumor', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'image_aug', None, 'cp_poisson']:
+    for augmentation in ['cp_naive', 'cp_simple', 'cp_gaussian', 'cp_tumor', # 'cp_poisson' 
+                         'cutmix_half', 'cutmix_dice', 'cutmix_random', 'cutmix_random_gaussian', 'cutmix_random_simple', 'cutmix_random_tumor', # 'cutmix_random_poisson',
+                         'image_aug', None]:
         for d in ['M', 'NM']:
             dataset = Seegene(split='train', cache=img_cache, dataset=d, augmentation=augmentation, aug_p=0.5)
             dataloader = DataLoader(dataset, 16, shuffle=False)
