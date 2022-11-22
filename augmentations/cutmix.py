@@ -59,23 +59,20 @@ def cutmix_dice(img_1, img_2, mask_1, mask_2):
 
 def cutmix_random(img_1, img_2, mask_1, mask_2, num_holes:int=3, min_max:list=[0.1,0.4], gaussian_blur=False, sigma=0.4):
     _, h, w = img_1.shape
-    if gaussian:
+    if gaussian_blur:
         alpha = np.zeros_like(mask_2)
         for _ in range(num_holes):
             ratio = random.random() * (min_max[1]-min_max[0]) + min_max[0]
             coordinate = (random.randint(0,h-int(h*ratio)-1), 
                           random.randint(0,w-int(w*ratio)-1)) # coordinate of left-top size of the patch
             alpha[coordinate[0]:coordinate[0]+int(h*ratio),
-                  coordinate[1]:coordinate[1]+int(w*ratio),
-                                                           :] = mask_2[coordinate[0]:coordinate[0]+int(h*ratio),
-                                                                       coordinate[1]:coordinate[1]+int(w*ratio),
-                                                                       :]
+                  coordinate[1]:coordinate[1]+int(w*ratio), :] = 1.0
             mask_1[coordinate[0]:coordinate[0]+int(h*ratio),
                    coordinate[1]:coordinate[1]+int(w*ratio),
                                                            :] = mask_2[coordinate[0]:coordinate[0]+int(h*ratio),
                                                                        coordinate[1]:coordinate[1]+int(w*ratio),
                                                                        :]
-        alpha = gaussian_blur(alpha[...,1], sigma)
+        alpha = gaussian(alpha[...,1], sigma)
         alpha = torch.from_numpy(alpha)
         img_1,_ = cp(img_1, img_2, mask_1, mask_2, alpha)
     else:
@@ -117,25 +114,11 @@ def cutmix_random_tumor(img_1, img_2, mask_1, mask_2, num_holes:int=3, min_max:l
         coordinate = (random.randint(0,h-int(h*ratio)-1), 
                       random.randint(0,w-int(w*ratio)-1)) # coordinate of left-top size of the patch
         alpha[coordinate[0]:coordinate[0]+int(h*ratio),
-              coordinate[1]:coordinate[1]+int(w*ratio),
-                                                      :] = mask_2[coordinate[0]:coordinate[0]+int(h*ratio),
-                                                                  coordinate[1]:coordinate[1]+int(w*ratio),
-                                                                  :]
-    alpha = alpha[...,1]
+              coordinate[1]:coordinate[1]+int(w*ratio), :] = 1.0
     # step1 : Do TumorCP with P_cp
     if p_cp >= random.random():
-        # convert img_1, mask_1 to torch.FloatTensor
-        transform_pytorch_tensor = A.Compose([A.Resize(size,size),
-                                              ToTensorV2()])
-        aug = transform_pytorch_tensor(image=img_1, mask=mask_1)
-        img_1 = aug['image'] # (3,size,size)
-        mask_1 = aug['mask'] # (size,size,2)
-
-        # step2 : Randomly select a tumor to copy. img_2 and mask_2 are np.ndarray yet
-        img_2 = img_2 * alpha # image with tumor only # (size,size,3)
-
-        # step3 : Do Object-level augmentation with P_trans
-        ## step3-1 : rigid transformation
+        # step1 : Do Object-level augmentation with P_trans
+        ## step1-1 : rigid transformation
         transform_rigid = A.Compose([
                                      A.HorizontalFlip(p=p_trans),
                                      A.VerticalFlip(p=p_trans),
@@ -145,38 +128,28 @@ def cutmix_random_tumor(img_1, img_2, mask_1, mask_2, num_holes:int=3, min_max:l
                                      A.PadIfNeeded(size,size),
                                      A.Resize(size,size)
                                      ]) # a.k.a spatial transformation in the paper
-        aug = transform_rigid(image=img_2, mask=mask_2)
+        aug = transform_rigid(image=img_2, mask=alpha)
         img_2 = aug['image'] # (size,size,3) np.ndarray
-        mask_2 = aug['mask'] # (size,size,2) np.ndarray
+        alpha = aug['mask'] # (size,size,2) np.ndarray
 
-        ## step3-2 : gamma transformation
+        ## step1-2 : gamma transformation
         transform_gamma = A.Compose([A.RandomGamma(gamma_limit=(75,150),p=p_trans),
                                      A.Resize(size,size)]) # gamma, I scaled from paper's ratio to follow albumentation's range
-        aug = transform_gamma(image=img_2.astype(np.float64), mask=mask_2) # A.RandomGamma uses Numpy's function. It requires float64 type.
+        aug = transform_gamma(image=img_2.astype(np.float64), mask=alpha) # A.RandomGamma uses Numpy's function. It requires float64 type.
         img_2 = aug['image'] # (size,size,3) np.ndarray
-        mask_2 = aug['mask'] # (size,size,2) np.ndarray
+        alpha = aug['mask'] # (size,size,2) np.ndarray
 
-        ## step3-3 : blurring(gaussian) transformation
+        ## step1-3 : blurring(gaussian) transformation
         sigma = random.randint(50,100)/100
-        alpha = mask_2[...,1] # (size,size)
-        alpha = gaussian(alpha, sigma=sigma) # (size,size)
-        alpha = torch.from_numpy(alpha)
-
-        # step4 : Randomly select a place to paste onto
-        aug = transform_pytorch_tensor(image=img_2, mask=mask_2)
-        img_2 = aug['image']
-        mask_2 = aug['mask']
-        img, mask = cp(img_1, img_2, mask_1, mask_2, alpha)
-        
-        # conver img, mask to numpy.ndarray
-        img = img.cpu().detach().numpy()
-        mask = mask.cpu().detach().numpy()
-        img = np.einsum('chw->hwc',img)
+        alpha = np.where(alpha>0.0001, 1.0, 0.0)
+        mask = (1-alpha[...,1:])*mask_1 + alpha[...,1:]*mask_2
+        alpha = gaussian(alpha[...,0], sigma=sigma)
+        img = (1-alpha[...,None])*img_1 + alpha[...,None]*img_2
     else: # step1 : do nothing with prop (1-P_cp)
         img, mask = img_1, mask_1
     
 
-    # step5 : Image-level Data Augmentation
+    # step2 : Image-level Data Augmentation
     transform_img_level = A.Compose([A.Resize(size,size),
                                      ToTensorV2()])
     aug = transform_img_level(image=img, mask=mask)
