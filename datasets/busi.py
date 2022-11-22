@@ -46,7 +46,7 @@ class BUSI(Dataset):
             self.img_list = self.img_list[int(0.7*len(self.img_list)):int(0.85*len(self.img_list))]
         else:
             self.img_list = self.img_list[int(0.85*len(self.img_list)):]
-        self.legnth = len(self.img_list)
+        self.length = len(self.img_list)
         
         self.normal_transform = A.Compose([A.Resize(size,size),
                                            ToTensorV2()])
