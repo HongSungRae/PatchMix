@@ -175,26 +175,23 @@ def cutmix_random_poisson(img_1, img_2, mask_1, mask_2, num_holes:int=3, min_max
     if p_poisson >= random.random(): # Do CP-Poisson with p_poisson
         # step1 : mask synthesis
         _, h, w = img_1.shape
-        mask = mask_1
+        alpha = torch.zeros_like(mask_2)
         for _ in range(num_holes):
             ratio = random.random() * (min_max[1]-min_max[0]) + min_max[0]
             coordinate = (random.randint(0,h-int(h*ratio)-1), 
                       random.randint(0,w-int(w*ratio)-1)) # coordinate of left-top size of the patch
-            mask[coordinate[0]:coordinate[0]+int(h*ratio),
-                coordinate[1]:coordinate[1]+int(w*ratio),
-                                                        :] = mask_2[coordinate[0]:coordinate[0]+int(h*ratio),
-                                                                    coordinate[1]:coordinate[1]+int(w*ratio),
-                                                                    :]
-         
+            alpha[coordinate[0]:coordinate[0]+int(h*ratio),
+                  coordinate[1]:coordinate[1]+int(w*ratio), :] = 1.0
+        
+        mask = (1-alpha)*mask_1 + alpha*mask_2
         # step2 : image generate
         img_1 = torch.einsum('c...->...c', img_1)
         img_2 = torch.einsum('c...->...c', img_2)
         img_1 = img_1.cpu().detach().numpy().astype(np.float32) # target
         img_2 = img_2.cpu().detach().numpy().astype(np.float32) # source
-        mask_2 = mask_2.cpu().detach().numpy().astype(np.uint8) # source mask
-        mask_2 = find_channel_to_attach(mask_2[...,1:])
-        _, mask_2 = cv2.threshold(mask_2, 0, 255, cv2.THRESH_OTSU)
-        blended, _ = pie.poisson_blend(img_2, mask_2/255.0, img_1, 'import')
+        alpha = alpha.cpu().detach().numpy().astype(np.uint8) # source mask
+        _, alpha = cv2.threshold(alpha[...,0], 0, 255, cv2.THRESH_OTSU)
+        blended, _ = pie.poisson_blend(img_2, alpha/255.0, img_1, 'import')
         return torch.einsum('...c->c...', torch.from_numpy(blended/255.0)).float(), mask
     else: # Do nothing with 1-p_poisson
         return img_1, mask_1
