@@ -52,7 +52,9 @@ def parse_opt(known=False):
     parser.add_argument('--seegene_what', default='NM', type=str,
                         help='Seegene dataset에서 어떤 데이터를 사용할지 설정', choices=['NM','M'])
     parser.add_argument('--augmentation', '--a', default=None,
-                        help='augmentation', choices=[None, 'image_aug', 'cutmix_half', 'cutmix_dice', 'cutmix_random', 'cp_simple', 'cp_poisson', 'cp_gaussian', 'cp_tumor'])
+                        help='augmentation', choices=[None, 'image_aug', 
+                                                     'cutmix_half', 'cutmix_dice', 'cutmix_random', 'cutmix_random_simple', 'cutmix_random_gaussian', 'cutmix_random_tumor', 'cutmix_random_poisson',
+                                                     'cp_naive', 'cp_simple', 'cp_poisson', 'cp_gaussian', 'cp_tumor'])
     parser.add_argument('--aug_p', default=0.3, type=float,
                         help='augmentation prop')
     parser.add_argument('--ratio', default=None, type=float,
