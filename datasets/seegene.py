@@ -83,7 +83,7 @@ class Seegene(Dataset):
                                         ])
 
     def __len__(self):
-        if self.ratio != None:
+        if (self.ratio != None) and (self.split == 'train'):
             return (self.length + int(self.length*self.ratio))
         else:
             return self.length
@@ -125,9 +125,9 @@ class Seegene(Dataset):
 
 
     def __getitem__(self, idx):
-        if (idx > self.length) and (self.ratio != None):
+        if (idx >= self.length) and (self.ratio != None):
             self.aug_p == 1.0
-            idx = random.randint(0, self.length-1)
+            idx = random.randint(0, len(self.df)-1)
         if (random.random() >= self.aug_p) or (self.split in ['test', 'validation']) or (self.augmentation == None):
             pat_id, file_id = self.df.iloc[idx]
             img, mask = self._get_img_mask(pat_id, file_id, self.normal_transform)
@@ -139,7 +139,7 @@ class Seegene(Dataset):
             if self.dataset == 'NM' and 'cp' in self.augmentation: # cp_NM의 경우, img_2는 무조건 M이여야한다
                 pat_id_2, file_id_2 = self.df_M.iloc[random.randint(0, len(self.df_M)-1)]
             else:
-                pat_id_2, file_id_2 = self.df.iloc[random.randint(0, self.__len__()-1)]
+                pat_id_2, file_id_2 = self.df.iloc[random.randint(0, len(self.df)-1)]
             img_1, mask_1 = self._get_img_mask(pat_id_1, file_id_1, self.transform)
             img_2, mask_2 = self._get_img_mask(pat_id_2, file_id_2, self.transform)
             if self.augmentation == 'cutmix_half':
@@ -182,12 +182,17 @@ class Seegene(Dataset):
 if __name__ == '__main__':
     manager = Manager()
     img_cache = manager.dict()
-    for augmentation in ['cp_naive', 'cp_simple', 'cp_gaussian', 'cp_tumor', # 'cp_poisson' 
-                         'cutmix_half', 'cutmix_dice', 'cutmix_random', 'cutmix_random_gaussian', 'cutmix_random_simple', 'cutmix_random_tumor', # 'cutmix_random_poisson',
-                         'image_aug', None]:
-        for d in ['M', 'NM']:
-            dataset = Seegene(split='train', cache=img_cache, dataset=d, augmentation=augmentation, aug_p=0.5)
-            dataloader = DataLoader(dataset, 16, shuffle=False)
-            start = time.time()
-            image, mask = next(iter(dataloader))
-            print(f'{d}/{augmentation} | Image : {image.shape} | Mask : {mask.shape} | {(time.time()-start):.4f} 초')
+    # for augmentation in ['cp_naive', 'cp_simple', 'cp_gaussian', 'cp_tumor', # 'cp_poisson' 
+    #                      'cutmix_half', 'cutmix_dice', 'cutmix_random', 'cutmix_random_gaussian', 'cutmix_random_simple', 'cutmix_random_tumor', # 'cutmix_random_poisson',
+    #                      'image_aug', None]:
+    #     for d in ['M', 'NM']:
+    #         dataset = Seegene(split='train', cache=img_cache, dataset=d, augmentation=augmentation, aug_p=0.5)
+    #         dataloader = DataLoader(dataset, 16, shuffle=False)
+    #         start = time.time()
+    #         image, mask = next(iter(dataloader))
+    #         print(f'{d}/{augmentation} | Image : {image.shape} | Mask : {mask.shape} | {(time.time()-start):.4f} 초')
+    dataset = Seegene(split='train', cache=img_cache, dataset='NM', augmentation='cutmix_half', ratio=0.3, aug_p=0.5)
+    print(len(dataset))
+    dataloader = DataLoader(dataset, 16, shuffle=False)
+    for i,(a,v) in enumerate(dataloader):
+        print(i)
