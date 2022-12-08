@@ -313,7 +313,7 @@ def main(args):
         elif model_name == 'unet++':
             model = smp.UnetPlusPlus(encoder_name=args.backbone,classes=2).cuda()
         model.load_state_dict(torch.load(os.path.join(args.test_path, 'model.pth')))
-        test(model, test_loader, args.test_path)
+        test(model, test_loader, './exp/'+args.experiment_name, args)
     else: # train & validation
         wandb.watch(model, criterion, log="all", log_freq=5)
         global best_loss, count
